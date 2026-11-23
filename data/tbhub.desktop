@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Toughbook Hub
+Comment=Night mode, GPS, power and hotkeys for Panasonic Toughbooks
+Exec=tbhub gui
+Icon=computer-laptop
+Terminal=false
+Categories=Settings;HardwareSettings;System;
+Keywords=toughbook;panasonic;gps;night;brightness;

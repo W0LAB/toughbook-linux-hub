@@ -1,0 +1,11 @@
+# Toughbook Hub (tbhub) udev rules
+
+# Let the 'video' group change Panasonic firmware settings (sticky Fn key,
+# BIOS brightness presets, ...). Attributes that don't exist are skipped.
+ACTION=="add|bind|change", SUBSYSTEM=="acpi", KERNEL=="MAT0019:00", \
+  RUN+="/bin/sh -c 'cd /sys%p && for f in sticky_key ac_brightness dc_brightness current_brightness mute eco_mode cdpower; do [ -e $$f ] && chgrp video $$f && chmod g+w $$f; done; true'"
+
+# Give the logged-in user read access to the Toughbook *hotkey* input devices
+# only, so `tbhub keys` can see Fn/A-button events. Regular keyboards are not
+# included. Must sort before 73-seat-late.rules for uaccess to apply.
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="Panasonic Laptop Support|Intel HID events|Intel HID 5 button array", TAG+="uaccess"

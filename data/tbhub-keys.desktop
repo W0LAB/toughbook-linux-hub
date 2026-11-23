@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Toughbook Hub hotkeys
+Comment=Maps Toughbook Fn / A-button hotkeys to tbhub actions
+Exec=tbhub keys
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
