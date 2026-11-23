@@ -64,6 +64,11 @@ class Hub(Gtk.ApplicationWindow):
     def __init__(self, app, start_page=None):
         super().__init__(application=app, title="Toughbook Hub")
         self.set_default_size(940, 640)
+        icon = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "tbhub.svg")
+        if os.path.exists(icon):
+            self.set_icon_from_file(icon)
+        else:
+            self.set_icon_name("tbhub")
         self.bl = hw.Backlight()
         self.pana = hw.Panasonic()
         self.cfg = modes.load_config()

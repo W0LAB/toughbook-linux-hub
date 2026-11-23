@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Toughbook Hub icon: a generic rugged laptop showing a night-mode GPS reticle. -->
+  <defs>
+    <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b626b"/>
+      <stop offset="1" stop-color="#33383e"/>
+    </linearGradient>
+    <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4c535b"/>
+      <stop offset="1" stop-color="#2a2e33"/>
+    </linearGradient>
+    <radialGradient id="screen" cx="0.5" cy="0.5" r="0.7">
+      <stop offset="0" stop-color="#3a0a08"/>
+      <stop offset="1" stop-color="#0e0404"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ff3b2f" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ff3b2f" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="scr"><rect x="27" y="22" width="74" height="52" rx="3"/></clipPath>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="64" cy="118" rx="52" ry="5" fill="#000" opacity="0.25"/>
+
+  <!-- carry handle (behind the base, sticks out the front) -->
+  <path d="M42 100 v8 a8 8 0 0 0 8 8 h28 a8 8 0 0 0 8 -8 v-8"
+        fill="none" stroke="#1b1d20" stroke-width="6" stroke-linejoin="round"/>
+
+  <!-- base -->
+  <path d="M19 84 H109 L117 101 a3 3 0 0 1 -2.7 4.3 H13.7 A3 3 0 0 1 11 101 Z" fill="url(#base)"/>
+  <rect x="11" y="101" width="106" height="4.5" rx="2" fill="#1f2226"/>
+  <!-- keyboard hint -->
+  <path d="M28 89 H100 M25 94 H103 M22 99 H106" stroke="#22262a" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="5 2.2"/>
+  <!-- status LED -->
+  <circle cx="104" cy="103.2" r="1.4" fill="#ffb02e"/>
+
+  <!-- lid -->
+  <rect x="17" y="12" width="94" height="72" rx="7" fill="url(#lid)"/>
+  <rect x="17.5" y="12.5" width="93" height="71" rx="6.5" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+
+  <!-- screen -->
+  <rect x="27" y="22" width="74" height="52" rx="3" fill="url(#screen)"/>
+  <g clip-path="url(#scr)">
+    <!-- MGRS-style grid -->
+    <path d="M27 35 H101 M27 48 H101 M27 61 H101 M45.5 22 V74 M64 22 V74 M82.5 22 V74"
+          stroke="#ff3b2f" stroke-opacity="0.16" stroke-width="1"/>
+    <circle cx="64" cy="48" r="26" fill="url(#glow)"/>
+    <!-- reticle -->
+    <g stroke="#ff3b2f" stroke-width="2.6" stroke-linecap="round" fill="none">
+      <circle cx="64" cy="48" r="13"/>
+      <path d="M64 29 V39 M64 57 V67 M45 48 H55 M73 48 H83"/>
+    </g>
+    <circle cx="64" cy="48" r="2.6" fill="#ff6a5e"/>
+    <!-- glass sheen -->
+    <path d="M27 22 H70 L50 74 H27 Z" fill="#ffffff" opacity="0.04"/>
+  </g>
+  <rect x="27" y="22" width="74" height="52" rx="3" fill="none" stroke="#000" stroke-opacity="0.5"/>
+
+  <!-- rubber corner bumpers -->
+  <g fill="#1b1d20">
+    <path d="M17 32 V19 a7 7 0 0 1 7 -7 H37 v6 H27 a4 4 0 0 0 -4 4 V32 Z"/>
+    <path d="M111 32 V19 a7 7 0 0 0 -7 -7 H91 v6 H101 a4 4 0 0 1 4 4 V32 Z"/>
+    <path d="M17 64 V77 a7 7 0 0 0 7 7 H37 v-6 H27 a4 4 0 0 1 -4 -4 V64 Z"/>
+    <path d="M111 64 V77 a7 7 0 0 1 -7 7 H91 v-6 H101 a4 4 0 0 0 4 -4 V64 Z"/>
+  </g>
+  <g fill="#ffffff" opacity="0.10">
+    <path d="M18.5 30 V19.5 a5.5 5.5 0 0 1 5.5 -5.5 H35 v1.2 H24 a4.3 4.3 0 0 0 -4.3 4.3 V30 Z"/>
+    <path d="M109.5 30 V19.5 a5.5 5.5 0 0 0 -5.5 -5.5 H93 v1.2 H104 a4.3 4.3 0 0 1 4.3 4.3 V30 Z"/>
+  </g>
+</svg>
