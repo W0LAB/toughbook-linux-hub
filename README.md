@@ -38,6 +38,7 @@ Open **Toughbook Hub** from the menu, or use the command line:
 
 ```sh
 tbhub night toggle          # also: on | off | status
+tbhub night cycle           # next tint colour: red → green → amber → gray
 tbhub concealed toggle
 tbhub reset                 # panic button: clear tint, leave all modes, brightness ≥ 50%
 tbhub brightness +10        # or 40, -10

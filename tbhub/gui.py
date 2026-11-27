@@ -23,6 +23,7 @@ CSS = b"""
 
 ACTIONS = [
     ("night toggle", "Toggle night mode"),
+    ("night cycle", "Cycle night mode colour"),
     ("concealed toggle", "Toggle concealed mode"),
     ("brightness +10", "Brightness up"),
     ("brightness -10", "Brightness down"),
@@ -193,6 +194,8 @@ class Hub(Gtk.ApplicationWindow):
             self.toast(str(e))
 
     def on_cfg(self, widget, *args):
+        if self._syncing:
+            return
         key = args[-1]
         if isinstance(widget, Gtk.Switch):
             val = widget.get_active()
@@ -640,6 +643,8 @@ class Hub(Gtk.ApplicationWindow):
             active = modes.active_modes()
             self.btn_night.set_active("night" in active)
             self.btn_conc.set_active("concealed" in active)
+            self.cfg["night_color"] = modes.load_config()["night_color"]
+            self.night_color.set_active_id(self.cfg["night_color"])
             Gtk.Settings.get_default().set_property(
                 "gtk-application-prefer-dark-theme", bool(active))
             if self.bl.available:

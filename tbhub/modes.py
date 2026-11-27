@@ -107,6 +107,19 @@ def night_off():
     _apply_tint(cfg, st)
 
 
+def cycle_night_color():
+    """Switch night mode to the next tint colour, save it, and re-apply it if visible."""
+    cfg = load_config()
+    colors = list(hw.TINTS)
+    cur = cfg.get("night_color")
+    cfg["night_color"] = colors[(colors.index(cur) + 1) % len(colors)] if cur in colors else colors[0]
+    save_config(cfg)
+    st = _load_state()
+    if "night" in st and "concealed" not in st:
+        _apply_tint(cfg, st)
+    return cfg["night_color"]
+
+
 # --------------------------------------------------------------------------- concealed
 
 def concealed_on():

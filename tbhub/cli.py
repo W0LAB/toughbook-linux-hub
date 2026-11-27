@@ -12,6 +12,9 @@ ON_OFF = ["on", "off", "toggle", "status"]
 
 
 def _mode_cmd(mode, arg):
+    if arg == "cycle":
+        print(f"{mode} colour: {modes.cycle_night_color()}")
+        return
     if arg == "toggle":
         on = modes.toggle(mode)
     elif arg in ("on", "off"):
@@ -200,7 +203,9 @@ def build_parser():
 
     for m, h in (("night", "dim + red/green/amber/gray tint"), ("concealed", "minimum light, muted")):
         sp = sub.add_parser(m, help=h)
-        sp.add_argument("state", nargs="?", default="toggle", choices=ON_OFF)
+        sp.add_argument("state", nargs="?", default="toggle",
+                        choices=ON_OFF + (["cycle"] if m == "night" else []),
+                        help="cycle = next tint colour" if m == "night" else None)
 
     sp = sub.add_parser("reset", help="clear tint, leave all modes, restore usable brightness")
 
