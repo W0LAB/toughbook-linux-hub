@@ -1,132 +1,98 @@
 # toughbook-linux-hub (`tbhub`)
 
-An unofficial Linux companion app for Panasonic Toughbooks, in the spirit of PC Hub on Windows:
-night and concealed modes, GPS with MGRS, Fn/A-button hotkeys, battery health and radio switches.
-Built and tested on an FZ-55 mk2 (Debian 13, XFCE/X11). It should work on other Toughbooks that use
-the `panasonic_laptop` driver; reports from other models are welcome.
+An unofficial Linux version of Panasonic's PC Hub for Toughbooks. Tested on an FZ-55 mk2
+(Debian 13, XFCE/X11); other Toughbooks using the `panasonic_laptop` driver should work.
 
 > Not affiliated with or endorsed by Panasonic. "Toughbook" and "Panasonic" are trademarks of
 > Panasonic Corporation.
 
-| Feature | How |
-|---|---|
-| **Night mode**: very dim backlight + red/green/amber screen tint | `intel_backlight` + linear RandR gamma ramps, like PC Hub on Windows (gammastep fallback on Wayland) |
-| **Concealed mode**: minimum light, audio muted, optional radio silence | backlight raw 1, `pactl`, `/dev/rfkill` |
-| **GPS**: fix, lat/lon, DMS, **MGRS**, UTM, accuracy, per-satellite signal | gpsd (local or remote), or the serial port directly (u-blox UBX + NMEA) |
-| **Hotkeys**: bind Fn / A-button combos (e.g. Fn+A3) to any action | evdev listener on the `Panasonic Laptop Support` device |
-| Power: charge, draw, time left, battery health, cycles | `/sys/class/power_supply` |
-| Wireless: per-radio switches, airplane mode | rfkill |
-| Firmware: sticky Fn key, BIOS brightness presets | `panasonic_laptop` driver sysfs |
+## Features
 
-Both modes save the previous state and restore it exactly. They can be combined in any order.
+- **Night mode**: very dim screen with a red, green, amber or gray tint
+- **Concealed mode**: lowest possible light, sound muted, optional radio silence
+- **GPS**: position in MGRS, UTM, lat/lon and DMS, with accuracy and satellite signal
+- **Hotkeys**: bind Fn / A-button combos (e.g. Fn+A3) to any action
+- **Power**: charge, time left, battery health and cycles
+- **Wireless**: per-radio switches and airplane mode
+- **Firmware**: sticky Fn key, BIOS brightness presets
 
-## Requirements
-
-Python 3.9+ and GTK 3 bindings, plus the standard tools it calls (no pip packages):
-
-```sh
-sudo apt install python3-gi gir1.2-gtk-3.0 x11-xserver-utils pulseaudio-utils
-sudo apt install gpsd gpsd-clients     # optional: for the gpsd GPS source
-sudo apt install gammastep             # optional: screen tint on Wayland (wlroots)
-```
-
-Your user should be in `video` (backlight) and `dialout` (direct serial GPS).
+Both modes restore your previous settings when turned off, and can be combined.
 
 ## Install
 
 ```sh
+sudo apt install python3-gi gir1.2-gtk-3.0 pulseaudio-utils picom
 git clone https://github.com/W0LAB/toughbook-linux-hub.git
 cd toughbook-linux-hub
-./install.sh            # user files + udev rule (asks for sudo once)
-./install.sh --user-only
-./install.sh --uninstall
+./install.sh
 ```
 
-The udev rule (`data/70-tbhub.rules`) does two things:
-1. Lets the `video` group write Panasonic firmware attributes (otherwise root-only).
-2. Gives the logged-in user read access to the **hotkey** input devices only (not regular
-   keyboards), so Fn/A-button presses can be seen. **Log out and back in afterwards.**
+Then make sure your user is in the `video` and `dialout` groups, and **log out and back in**.
 
-## Binding Fn+A3 to night mode
+Optional: `gpsd gpsd-clients` for the gpsd GPS source, `gammastep` for the tint on Wayland.
+`./install.sh --user-only` skips the udev rule; `./install.sh --uninstall` removes everything.
 
-Run learn mode and press the key to see what it sends:
+## Usage
+
+Open **Toughbook Hub** from the menu, or use the command line:
+
+```sh
+tbhub night toggle          # also: on | off | status
+tbhub concealed toggle
+tbhub reset                 # panic button: clear tint, leave all modes, brightness ≥ 50%
+tbhub brightness +10        # or 40, -10
+tbhub gps -w                # live position
+tbhub radio airplane toggle # or wifi | bt | wwan | all, on | off | toggle
+tbhub status
+```
+
+Run `tbhub --help` or `tbhub <command> --help` for all options.
+
+## Hotkeys
+
+To bind Fn+A3 to night mode, press the key in learn mode, then bind the code it shows:
 
 ```sh
 tbhub keys --learn          # press Fn+A3
-```
-
-On the FZ-55 mk2, the A-buttons arrive on the `Panasonic Laptop Support` device as ordinary key
-codes (Fn+A1 = `KEY_MACRO1` 656, Fn+A3 = `KEY_MACRO3` 658), so they are bound by key code:
-
-```sh
 tbhub keys --bind "night toggle" --device "Panasonic Laptop Support" --key 658
 ```
 
-Buttons the kernel has no keymap entry for show up as `KEY_UNKNOWN` with a raw scan code
-instead. Bind those with `--scan 0x..` using the value learn mode prints.
+Or use **Hotkeys → Learn key… → Bind** in the GUI. Any `tbhub` command works as an action, as
+does `exec <shell command>`.
 
-You can also use **Hotkeys → Learn key… → Bind** in the GUI. The hotkey service (`tbhub keys`,
-started at login) reloads bindings automatically. Actions: any `tbhub` subcommand
-(`night toggle`, `concealed toggle`, `brightness +10`, `radio airplane toggle`, `gui`), or
-`exec <shell command>`. If nothing prints in learn mode, try `tbhub keys --learn --all`.
-If a key shows up as a normal key on the regular keyboard, bind it in
-*XFCE Settings → Keyboard → Application Shortcuts* to `tbhub night toggle` instead.
+- Keys shown as `KEY_UNKNOWN` are bound with `--scan 0x..` instead of `--key`.
+- Nothing shows up in learn mode? Try `tbhub keys --learn --all`.
+- Keys that arrive on the regular keyboard are better bound in
+  *XFCE Settings → Keyboard → Application Shortcuts*.
 
-## GPS source
+## GPS
 
-The GPS page has a **Source** panel. You can also pass `--source` on the command line.
-
-| Source | Behaviour |
-|---|---|
-| `auto` (default) | Uses gpsd if it is reachable *and has a receiver*. Otherwise reads the serial device directly, and switches back to gpsd if gpsd reappears. |
-| `gpsd` | gpsd at `gpsd_host:gpsd_port` (default `127.0.0.1:2947`). Can be a remote machine. |
-| `serial` | Reads `gps_device` at `gps_baud` (default `/dev/gps0`, 9600) directly. No gpsd needed. |
-
-Direct serial decodes both u-blox **UBX** (NAV-PVT/NAV-SAT, preferred: true accuracy in metres)
-and **NMEA** (RMC/GGA/GNS/GSA/GSV, for any other receiver). It needs the `dialout` group.
-
-Two programs reading one serial port corrupt each other's data. tbhub therefore refuses to open a device
-that gpsd is currently reading, and tells you to stop gpsd first:
+By default tbhub uses gpsd if it is running with a receiver, and otherwise reads the serial
+port (`/dev/gps0`) directly. To pick a source:
 
 ```sh
-sudo systemctl stop gpsd.socket gpsd      # stop gpsd (it restarts at boot or replug)
-tbhub gps --source serial --save          # remember the choice
-tbhub gps --source gpsd --host 10.0.0.5   # one-off: read a remote gpsd
-tbhub gps --devices                       # list candidate serial devices
+tbhub gps --source serial --save          # always read the serial port
+tbhub gps --source gpsd --host 10.0.0.5   # read a remote gpsd once
+tbhub gps --devices                       # list serial GPS devices
 ```
 
-## CLI
+Only one program can read the serial port, so stop gpsd before using `serial`:
+`sudo systemctl stop gpsd.socket gpsd`.
 
-```
-tbhub                       # GUI   (tbhub gui --page gps)
-tbhub night [on|off|toggle|status]
-tbhub concealed [on|off|toggle|status]
-tbhub reset                 # panic button: clear tint, leave modes, brightness ≥ 50%
-tbhub brightness [40|+10|-10]
-tbhub gps [-w] [--json] [--source auto|gpsd|serial] [--host H] [--port P]
-          [--device DEV] [--baud N] [--save] [--devices]
-tbhub radio [wifi|bt|wwan|all|airplane] [on|off|toggle]
-tbhub status [--json]
-tbhub pana sticky_key 1
-tbhub keys [--learn|--list|--bind ACTION ...]
-```
+## Configuration
 
-Settings live in `~/.config/tbhub/config.json` (night tint colour/level, concealed options) and
-`~/.config/tbhub/keys.json`. Saved mode state lives in `~/.local/state/tbhub/state.json`.
+Settings are saved from the GUI to `~/.config/tbhub/config.json` (modes, GPS) and
+`~/.config/tbhub/keys.json` (hotkeys).
 
-## Notes / known limits
+## Known limits
 
-- **gpsd reports the wrong GPS date on this unit (2019-04-08).** This is a week-number rollover
-  error. The receiver's own UBX NAV-PVT carries the correct date, so the fault is in how gpsd
-  decodes it, not in the NEO-M8J firmware. Position is unaffected. tbhub warns when a source's
-  date is more than a day off. Don't use gpsd's time from this receiver for chrony/NTP.
-- **Keyboard backlight colour is not controlled.** PC Hub's night mode also switches the
-  keyboard light. On the FZ-55 the keyboard colour and brightness are internal to the
-  embedded controller. Linux exposes no control for them, and reaching them would need an
-  out-of-tree kernel module (signed for Secure Boot). Use Fn+A4 (colour) and Fn+F12
-  (brightness) instead. Both work on Linux because the firmware handles them.
-- `eco_mode` and `cdpower` return I/O errors on the FZ-55 (not implemented in firmware), so they are hidden.
-- The screen tint resets if the display reconfigures (dock/undock). Toggle the mode again to re-apply it.
+- **The keyboard backlight isn't changed by night mode.** Linux has no control for it on the
+  FZ-55; use Fn+A4 (colour) and Fn+F12 (brightness).
+- **gpsd shows the wrong date (2019) on the FZ-55's receiver.** Position is fine and tbhub warns
+  about it, but don't use gpsd's time for NTP. Direct serial reads the correct date.
+- **The screen flickers briefly when a mode turns on or off.** The tint uses picom, which
+  takes over from XFCE's compositor only while a mode is on.
+- **Docking or undocking clears the tint.** Toggle the mode again.
 
 ## License
 
