@@ -198,7 +198,7 @@ def build_parser():
     sp = sub.add_parser("gui", help="open the graphical hub (default)")
     sp.add_argument("--page", choices=["display", "gps", "power", "wireless", "hotkeys", "device"])
 
-    for m, h in (("night", "dim + red/green tint"), ("concealed", "minimum light, muted")):
+    for m, h in (("night", "dim + red/green/amber/gray tint"), ("concealed", "minimum light, muted")):
         sp = sub.add_parser(m, help=h)
         sp.add_argument("state", nargs="?", default="toggle", choices=ON_OFF)
 

@@ -15,7 +15,7 @@ STATE_FILE = STATE_DIR / "state.json"
 DEFAULT_CONFIG = {
     # Night mode: very dim backlight + red shift (preserves dark adaptation)
     "night_backlight_pct": 2.0,
-    "night_color": "red",          # red | green | amber
+    "night_color": "red",          # red | green | amber | gray
     "night_gamma": 0.85,            # extra software dimming on top of backlight
     # Concealed mode: lowest possible light and no sound
     "concealed_backlight_raw": 1,   # 0 blanks some panels completely; 1 = barely lit

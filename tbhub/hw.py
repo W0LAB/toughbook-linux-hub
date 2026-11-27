@@ -228,18 +228,19 @@ def set_audio_muted(muted):
 
 # --------------------------------------------------------------------------- colour tint
 
-# Per-channel linear multipliers (r, g, b). Each channel's ramp is scaled linearly, so white
-# becomes the full tint colour and every grey level keeps its relative brightness, which is
-# how PC Hub's night mode looks on Windows (SetDeviceGammaRamp). xrandr's --gamma is an
-# exponent rather than a scale: it leaves white at full white and bends mid-tones unevenly
-# per channel, which caused the colour fringing and odd-looking antialiased text.
+# Per-channel linear multipliers (r, g, b) for the gamma ramps. On X11 the screen is first
+# converted to grayscale by picom (see below), so the ramp turns brightness into the tint
+# colour and nothing on screen disappears (e.g. blue text under a red tint). Without picom
+# the ramps alone still tint, but pure colours the tint lacks go dark. Ramps are linear:
+# xrandr's --gamma is an exponent, which left white at full white and caused colour fringing.
 TINTS = {
     "red": (1.0, 0.0, 0.0),     # night-vision red, preserves dark adaptation
     "green": (0.0, 1.0, 0.0),   # NVG-friendly green
     "amber": (1.0, 0.45, 0.0),
+    "gray": (1.0, 1.0, 1.0),    # grayscale only, plus dimming
 }
-# colour temperature fallback for gammastep (cannot produce green)
-_TINT_KELVIN = {"red": 1000, "green": 1000, "amber": 2300}
+# colour temperature fallback for gammastep (cannot produce green or gray)
+_TINT_KELVIN = {"red": 1000, "green": 1000, "amber": 2300, "gray": 6500}
 
 
 def _xrandr_set_ramps(mult):
@@ -318,11 +319,133 @@ def _xrandr_set_ramps(mult):
     return done > 0
 
 
-def set_tint(color=None, brightness=1.0):
-    """Tint the screen ('red'|'green'|'amber') with extra linear dimming, or reset if color is None.
+# Gamma ramps are per channel, so they cannot mix colours into gray. Grayscale is instead
+# drawn by picom with a GLSL shader while any tint is on. xfwm4's own compositor is switched
+# off while picom runs and switched back on afterwards.
+_GRAY_SHADER = """#version 330
+in vec2 texcoord;
+uniform sampler2D tex;
+uniform float opacity;
+vec4 default_post_processing(vec4 c);
+vec4 window_shader() {
+    vec4 c = texture2D(tex, texcoord / textureSize(tex, 0), 0);
+    float y = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+    return default_post_processing(vec4(vec3(y), c.a) * opacity);
+}
+"""
 
-    X11: linear per-channel RandR gamma ramps. Elsewhere (wlroots): gammastep colour temperature.
+
+def _runtime_dir():
+    d = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/tbhub-{os.getuid()}") / "tbhub"
+    d.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return d
+
+
+def _gray_state_file():
+    return _runtime_dir() / "grayscale.json"
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except (OSError, TypeError):
+        return False
+    try:
+        return "picom" in Path(f"/proc/{pid}/cmdline").read_text()
+    except OSError:
+        return True
+
+
+def _xfwm_compositing(value=None):
+    """Get (value=None) or set xfwm4's compositor. Returns the bool state or None if unknown."""
+    if not shutil.which("xfconf-query"):
+        return None
+    if value is None:
+        rc, out = run(["xfconf-query", "-c", "xfwm4", "-p", "/general/use_compositing"])
+        return out == "true" if rc == 0 else None
+    run(["xfconf-query", "-c", "xfwm4", "-p", "/general/use_compositing",
+         "-s", "true" if value else "false"])
+    return value
+
+
+def grayscale_active():
+    import json
+    try:
+        st = json.loads(_gray_state_file().read_text())
+    except (OSError, ValueError):
+        return False
+    return _pid_alive(st.get("pid"))
+
+
+def _grayscale_on():
+    import json
+    import time
+    if grayscale_active():
+        return True
+    if not (os.environ.get("DISPLAY") and shutil.which("picom")):
+        return False
+    shader = _runtime_dir() / "grayscale.glsl"
+    shader.write_text(_GRAY_SHADER)
+    xfwm_was = _xfwm_compositing()
+    if xfwm_was:
+        _xfwm_compositing(False)
+        time.sleep(0.5)  # let xfwm4 release the compositing selection
+    try:
+        proc = subprocess.Popen(
+            ["picom", "--config", "/dev/null", "--backend", "glx",
+             "--window-shader-fg", str(shader), "--no-fading-openclose"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True)
+    except OSError:
+        proc = None
+    time.sleep(0.7)
+    if proc is None or proc.poll() is not None:
+        if xfwm_was:
+            _xfwm_compositing(True)
+        return False
+    _gray_state_file().write_text(json.dumps({"pid": proc.pid, "xfwm_compositing": xfwm_was}))
+    return True
+
+
+def _grayscale_off():
+    import json
+    import signal
+    import time
+    f = _gray_state_file()
+    try:
+        st = json.loads(f.read_text())
+    except (OSError, ValueError):
+        return
+    pid = st.get("pid")
+    if _pid_alive(pid):
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+        for _ in range(20):
+            if not _pid_alive(pid):
+                break
+            time.sleep(0.05)
+    if st.get("xfwm_compositing"):
+        _xfwm_compositing(True)
+    try:
+        f.unlink()
+    except OSError:
+        pass
+
+
+def set_tint(color=None, brightness=1.0):
+    """Tint the screen ('red'|'green'|'amber'|'gray') with extra linear dimming, or reset if None.
+
+    X11: picom grayscale shader + linear per-channel RandR gamma ramps.
+    Elsewhere (wlroots): gammastep colour temperature.
     """
+    if color is None:
+        _grayscale_off()
+    elif os.environ.get("DISPLAY") and not _grayscale_on():
+        import sys
+        print("tbhub: picom not found or failed to start (sudo apt install picom); "
+              "using a plain tint", file=sys.stderr)
     if os.environ.get("DISPLAY"):
         if color is None:
             mult = (1.0, 1.0, 1.0)
