@@ -10,7 +10,7 @@ the `panasonic_laptop` driver; reports from other models are welcome.
 
 | Feature | How |
 |---|---|
-| **Night mode**: very dim backlight + red/green/amber screen tint | `intel_backlight` + xrandr per-channel gamma (gammastep fallback on Wayland) |
+| **Night mode**: very dim backlight + red/green/amber screen tint | `intel_backlight` + linear RandR gamma ramps, like PC Hub on Windows (gammastep fallback on Wayland) |
 | **Concealed mode**: minimum light, audio muted, optional radio silence | backlight raw 1, `pactl`, `/dev/rfkill` |
 | **GPS**: fix, lat/lon, DMS, **MGRS**, UTM, accuracy, per-satellite signal | gpsd (local or remote), or the serial port directly (u-blox UBX + NMEA) |
 | **Hotkeys**: bind Fn / A-button combos (e.g. Fn+A3) to any action | evdev listener on the `Panasonic Laptop Support` device |
@@ -126,7 +126,7 @@ Settings live in `~/.config/tbhub/config.json` (night tint colour/level, conceal
   out-of-tree kernel module (signed for Secure Boot). Use Fn+A4 (colour) and Fn+F12
   (brightness) instead. Both work on Linux because the firmware handles them.
 - `eco_mode` and `cdpower` return I/O errors on the FZ-55 (not implemented in firmware), so they are hidden.
-- The xrandr tint resets if the display reconfigures (dock/undock). Toggle the mode again to re-apply it.
+- The screen tint resets if the display reconfigures (dock/undock). Toggle the mode again to re-apply it.
 
 ## License
 

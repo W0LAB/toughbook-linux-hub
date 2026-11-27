@@ -228,41 +228,109 @@ def set_audio_muted(muted):
 
 # --------------------------------------------------------------------------- colour tint
 
-def _outputs():
-    rc, out = run(["xrandr", "--listmonitors"])
-    if rc != 0:
-        return []
-    return [line.split()[-1] for line in out.splitlines()[1:] if line.strip()]
-
-
-# xrandr per-channel gamma (r:g:b). Lower = that channel is pushed toward black.
+# Per-channel linear multipliers (r, g, b). Each channel's ramp is scaled linearly, so white
+# becomes the full tint colour and every grey level keeps its relative brightness, which is
+# how PC Hub's night mode looks on Windows (SetDeviceGammaRamp). xrandr's --gamma is an
+# exponent rather than a scale: it leaves white at full white and bends mid-tones unevenly
+# per channel, which caused the colour fringing and odd-looking antialiased text.
 TINTS = {
-    "red": "1:0.12:0.08",     # night-vision red, preserves dark adaptation
-    "green": "0.1:1:0.1",     # NVG-friendly green
-    "amber": "1:0.55:0.1",
+    "red": (1.0, 0.0, 0.0),     # night-vision red, preserves dark adaptation
+    "green": (0.0, 1.0, 0.0),   # NVG-friendly green
+    "amber": (1.0, 0.45, 0.0),
 }
 # colour temperature fallback for gammastep (cannot produce green)
 _TINT_KELVIN = {"red": 1000, "green": 1000, "amber": 2300}
 
 
-def set_tint(color=None, brightness=1.0):
-    """Tint the screen ('red'|'green'|'amber') with extra gamma dimming, or reset if color is None.
+def _xrandr_set_ramps(mult):
+    """Load a linear gamma ramp scaled by mult=(r, g, b) on every CRTC via libXrandr.
 
-    X11: xrandr per-channel gamma. Elsewhere (wlroots): gammastep colour temperature.
+    Returns True on success. Ramps persist after the connection closes, like xrandr's.
     """
-    if os.environ.get("DISPLAY") and shutil.which("xrandr"):
-        outs = _outputs()
-        if outs:
-            ok = True
-            for o in outs:
-                if color is None:
-                    args = ["--gamma", "1:1:1", "--brightness", "1"]
-                else:
-                    args = ["--gamma", TINTS.get(color, TINTS["red"]),
-                            "--brightness", f"{brightness:.2f}"]
-                ok &= run(["xrandr", "--output", o] + args)[0] == 0
-            if ok:
-                return True
+    import ctypes
+    import ctypes.util
+
+    lx, lr = ctypes.util.find_library("X11"), ctypes.util.find_library("Xrandr")
+    if not (lx and lr):
+        return False
+    try:
+        x11, xrr = ctypes.CDLL(lx), ctypes.CDLL(lr)
+    except OSError:
+        return False
+
+    ulong, ushort_p = ctypes.c_ulong, ctypes.POINTER(ctypes.c_ushort)
+
+    class ScreenResources(ctypes.Structure):
+        _fields_ = [("timestamp", ulong), ("configTimestamp", ulong),
+                    ("ncrtc", ctypes.c_int), ("crtcs", ctypes.POINTER(ulong)),
+                    ("noutput", ctypes.c_int), ("outputs", ctypes.POINTER(ulong)),
+                    ("nmode", ctypes.c_int), ("modes", ctypes.c_void_p)]
+
+    class CrtcGamma(ctypes.Structure):
+        _fields_ = [("size", ctypes.c_int),
+                    ("red", ushort_p), ("green", ushort_p), ("blue", ushort_p)]
+
+    x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    x11.XDefaultRootWindow.restype = ulong
+    x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+    x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+    xrr.XRRGetScreenResourcesCurrent.restype = ctypes.POINTER(ScreenResources)
+    xrr.XRRGetScreenResourcesCurrent.argtypes = [ctypes.c_void_p, ulong]
+    xrr.XRRFreeScreenResources.argtypes = [ctypes.POINTER(ScreenResources)]
+    xrr.XRRGetCrtcGammaSize.restype = ctypes.c_int
+    xrr.XRRGetCrtcGammaSize.argtypes = [ctypes.c_void_p, ulong]
+    xrr.XRRAllocGamma.restype = ctypes.POINTER(CrtcGamma)
+    xrr.XRRAllocGamma.argtypes = [ctypes.c_int]
+    xrr.XRRSetCrtcGamma.argtypes = [ctypes.c_void_p, ulong, ctypes.POINTER(CrtcGamma)]
+    xrr.XRRFreeGamma.argtypes = [ctypes.POINTER(CrtcGamma)]
+
+    dpy = x11.XOpenDisplay(None)
+    if not dpy:
+        return False
+    done = 0
+    try:
+        res = xrr.XRRGetScreenResourcesCurrent(dpy, x11.XDefaultRootWindow(dpy))
+        if not res:
+            return False
+        try:
+            for i in range(res.contents.ncrtc):
+                crtc = res.contents.crtcs[i]
+                size = xrr.XRRGetCrtcGammaSize(dpy, crtc)
+                if size < 2:
+                    continue
+                g = xrr.XRRAllocGamma(size)
+                if not g:
+                    continue
+                for ch, m in zip((g.contents.red, g.contents.green, g.contents.blue), mult):
+                    m = min(max(float(m), 0.0), 1.0)
+                    for j in range(size):
+                        ch[j] = int(round(j * 65535 * m / (size - 1)))
+                xrr.XRRSetCrtcGamma(dpy, crtc, g)
+                xrr.XRRFreeGamma(g)
+                done += 1
+        finally:
+            xrr.XRRFreeScreenResources(res)
+        x11.XSync(dpy, 0)
+    finally:
+        x11.XCloseDisplay(dpy)
+    return done > 0
+
+
+def set_tint(color=None, brightness=1.0):
+    """Tint the screen ('red'|'green'|'amber') with extra linear dimming, or reset if color is None.
+
+    X11: linear per-channel RandR gamma ramps. Elsewhere (wlroots): gammastep colour temperature.
+    """
+    if os.environ.get("DISPLAY"):
+        if color is None:
+            mult = (1.0, 1.0, 1.0)
+        else:
+            b = min(max(float(brightness), 0.0), 1.0)
+            mult = tuple(c * b for c in TINTS.get(color, TINTS["red"]))
+        if _xrandr_set_ramps(mult):
+            return True
     if shutil.which("gammastep"):
         if color is None:
             return run(["gammastep", "-x"])[0] == 0
